@@ -1,0 +1,73 @@
+import React from 'react';
+import {
+  Utensils,
+  Car,
+  Home,
+  Tv,
+  Shirt,
+  HeartPulse,
+  Dumbbell,
+  GraduationCap,
+  Gift,
+  PawPrint,
+  Briefcase,
+  PiggyBank,
+  TrendingUp,
+  Wallet,
+  CreditCard,
+  Coins,
+  ShoppingCart,
+  Coffee,
+  Plane,
+  Fuel,
+  Wrench,
+  Smartphone,
+  BookOpen,
+  DollarSign,
+  HelpCircle,
+} from 'lucide-react';
+
+export const CATEGORY_ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
+  utensils: Utensils,
+  car: Car,
+  home: Home,
+  tv: Tv,
+  shirt: Shirt,
+  heart: HeartPulse,
+  dumbbell: Dumbbell,
+  graduation: GraduationCap,
+  gift: Gift,
+  paw: PawPrint,
+  briefcase: Briefcase,
+  piggy: PiggyBank,
+  trending: TrendingUp,
+  wallet: Wallet,
+  card: CreditCard,
+  coins: Coins,
+  shopping: ShoppingCart,
+  coffee: Coffee,
+  plane: Plane,
+  fuel: Fuel,
+  wrench: Wrench,
+  phone: Smartphone,
+  book: BookOpen,
+  dollar: DollarSign,
+};
+
+export function getCategoryIcon(iconName: string): React.FC<{ className?: string }> {
+  return CATEGORY_ICON_MAP[iconName.toLowerCase()] || HelpCircle;
+}
+
+export const DEFAULT_CATEGORIES = [
+  { name: 'Alimentación', icon: 'utensils', color: '#ef4444', type: 'expense' as const },
+  { name: 'Transporte', icon: 'car', color: '#f97316', type: 'expense' as const },
+  { name: 'Hogar y Servicios', icon: 'home', color: '#84cc16', type: 'expense' as const },
+  { name: 'Ocio y Cultura', icon: 'tv', color: '#06b6d4', type: 'expense' as const },
+  { name: 'Salud y Cuidado', icon: 'heart', color: '#ec4899', type: 'expense' as const },
+  { name: 'Ropa y Calzado', icon: 'shirt', color: '#8b5cf6', type: 'expense' as const },
+  { name: 'Compras', icon: 'shopping', color: '#3b82f6', type: 'expense' as const },
+  { name: 'Café y Bares', icon: 'coffee', color: '#d97706', type: 'expense' as const },
+  { name: 'Nómina / Salario', icon: 'briefcase', color: '#10b981', type: 'income' as const },
+  { name: 'Inversiones', icon: 'trending', color: '#14b8a6', type: 'income' as const },
+  { name: 'Otros Ingresos', icon: 'coins', color: '#6366f1', type: 'income' as const },
+];

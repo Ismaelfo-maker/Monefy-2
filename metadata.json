@@ -1,0 +1,10 @@
+{
+  "name": "Monefy PWA",
+  "description": "PWA offline-first de finanzas personales sincronizada con Google Sheets y Google Drive mediante Apps Script",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

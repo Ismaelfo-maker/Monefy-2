@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="pieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#064e3b" flood-opacity="0.3" />
+    </filter>
+  </defs>
+  
+  <!-- Outer Rounded Rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  
+  <!-- Central Donut / Pie Symbol representing Monefy Expenses -->
+  <g transform="translate(256, 256)" filter="url(#dropShadow)">
+    <!-- Outer Ring -->
+    <circle r="140" fill="none" stroke="#064e3b" stroke-width="36" opacity="0.4" />
+    <circle r="140" fill="none" stroke="url(#pieGrad)" stroke-width="36" stroke-dasharray="660 880" stroke-linecap="round" transform="rotate(-90)" />
+    <!-- Secondary Slice -->
+    <circle r="140" fill="none" stroke="#f59e0b" stroke-width="36" stroke-dasharray="140 880" stroke-dashoffset="-690" stroke-linecap="round" transform="rotate(-90)" />
+    <!-- Center Circle badge -->
+    <circle r="92" fill="#ffffff" />
+    
+    <!-- Central Currency / Flow Icon -->
+    <path d="M-28 -40 H28 C34 -40 40 -34 40 -28 V28 C40 34 34 40 28 40 H-28 C-34 40 -40 34 -40 28 V-28 C-40 -34 -34 -40 -28 -40 Z" fill="#059669" />
+    <path d="M12 -8 C12 -2 7 4 0 4 C-7 4 -12 -2 -12 -8 C-12 -14 -7 -20 0 -20 C7 -20 12 -14 12 -8 Z" fill="#ffffff" />
+    <circle cx="20" cy="0" r="5" fill="#f59e0b" />
+    <path d="M-16 16 L-4 16 M-16 22 L4 22" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" />
+  </g>
+</svg>
