@@ -18,7 +18,6 @@ import {
   SyncLog,
   AppConfig,
   SyncEntityType,
-  User,
 } from '../../types';
 import { generateUUID } from '../../utils/uuid';
 import { getOrCreateDeviceId } from '../../utils/device';
@@ -29,6 +28,7 @@ const DB_VERSION = 2;
 export class DatabaseService {
   private db: IDBDatabase | null = null;
   private dbPromise: Promise<IDBDatabase> | null = null;
+  private activeUserId: string | null = null;
 
   public async getDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
@@ -207,6 +207,8 @@ export class DatabaseService {
     enqueueSync = true,
     operation: 'CREATE' | 'UPDATE' = 'CREATE'
   ): Promise<T> {
+    const activeUserId = storeName !== 'config' ? await this.getActiveUserId() : null;
+
     const db = await this.getDB();
     const tx = db.transaction(enqueueSync ? [storeName, 'sync_queue'] : [storeName], 'readwrite');
     const store = tx.objectStore(storeName);
@@ -221,6 +223,15 @@ export class DatabaseService {
       createdAt: (item as any).createdAt || now,
       updatedAt: now,
       isDeleted: (item as any).isDeleted ?? false,
+      createdByUserId:
+        (item as any).createdByUserId !== undefined && (item as any).createdByUserId !== null
+          ? (item as any).createdByUserId
+          : (activeUserId || null),
+      updatedByUserId:
+        (item as any).updatedByUserId !== undefined && (item as any).updatedByUserId !== null
+          ? (item as any).updatedByUserId
+          : (activeUserId || null),
+      createdByDeviceId: (item as any).createdByDeviceId ?? deviceId,
       updatedByDeviceId: deviceId,
       deviceId: deviceId,
     };
@@ -344,6 +355,33 @@ export class DatabaseService {
     return this.getUser(config.userId);
   }
 
+  public async getActiveUserId(): Promise<string | null> {
+    if (this.activeUserId) return this.activeUserId;
+    try {
+      if (typeof window !== 'undefined') {
+        const sessionUser =
+          window.sessionStorage?.getItem('monefy_user_id') ||
+          window.localStorage?.getItem('monefy_user_id');
+        if (sessionUser) {
+          this.activeUserId = sessionUser;
+          return this.activeUserId;
+        }
+      }
+    } catch {
+      // ignore storage access errors
+    }
+    try {
+      const config = await this.getConfig();
+      if (config && config.userId) {
+        this.activeUserId = config.userId;
+        return this.activeUserId;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   // App Configuration in config store
   public async getConfig(): Promise<AppConfig> {
     const store = await this.getStore('config', 'readonly');
@@ -351,6 +389,9 @@ export class DatabaseService {
       const req = store.get('app_config');
       req.onsuccess = () => {
         if (req.result && req.result.value) {
+          if (req.result.value.userId) {
+            this.activeUserId = req.result.value.userId;
+          }
           resolve(req.result.value);
         } else {
           // Clean initial default configuration - No mock user or demo data
@@ -385,6 +426,7 @@ export class DatabaseService {
   }
 
   public async saveConfig(config: AppConfig): Promise<void> {
+    this.activeUserId = config.userId || null;
     const store = await this.getStore('config', 'readwrite');
     return new Promise((resolve, reject) => {
       const req = store.put({ key: 'app_config', value: config });
