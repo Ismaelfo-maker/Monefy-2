@@ -18,12 +18,13 @@ import {
   SyncLog,
   AppConfig,
   SyncEntityType,
+  User,
 } from '../../types';
 import { generateUUID } from '../../utils/uuid';
 import { getOrCreateDeviceId } from '../../utils/device';
 
 const DB_NAME = 'monefy_pwa_database';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export class DatabaseService {
   private db: IDBDatabase | null = null;
@@ -39,86 +40,115 @@ export class DatabaseService {
       request.onupgradeneeded = (event) => {
         const db = request.result;
         const oldVersion = event.oldVersion;
+        const transaction = request.transaction!;
 
-        // Version 1 initialization and safe migration pattern
-        if (oldVersion < 1) {
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id' });
+        // Safe helper to obtain existing store or create if absent
+        const ensureStore = (
+          name: string,
+          options: IDBObjectStoreParameters
+        ): IDBObjectStore => {
+          if (!db.objectStoreNames.contains(name)) {
+            return db.createObjectStore(name, options);
           }
+          return transaction.objectStore(name);
+        };
 
-          if (!db.objectStoreNames.contains('accounts')) {
-            const store = db.createObjectStore('accounts', { keyPath: 'id' });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
+        // Safe helper to create index only if absent without re-creating stores
+        const ensureIndex = (
+          store: IDBObjectStore,
+          name: string,
+          keyPath: string | string[],
+          options?: IDBIndexParameters
+        ) => {
+          if (!store.indexNames.contains(name)) {
+            store.createIndex(name, keyPath, options);
           }
+        };
 
-          if (!db.objectStoreNames.contains('cards')) {
-            const store = db.createObjectStore('cards', { keyPath: 'id' });
-            store.createIndex('accountId', 'accountId', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+        // Incremental migration for Phase 1: covers all 13 stores and exact operational indices
+        if (oldVersion < 2) {
+          // 1. users
+          const usersStore = ensureStore('users', { keyPath: 'id' });
+          ensureIndex(usersStore, 'by_email', 'email', { unique: false });
+          ensureIndex(usersStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(usersStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('categories')) {
-            const store = db.createObjectStore('categories', { keyPath: 'id' });
-            store.createIndex('type', 'type', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 2. accounts
+          const accountsStore = ensureStore('accounts', { keyPath: 'id' });
+          ensureIndex(accountsStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(accountsStore, 'by_isDeleted', 'isDeleted', { unique: false });
+          ensureIndex(accountsStore, 'by_visibility', 'visibility', { unique: false });
 
-          if (!db.objectStoreNames.contains('movements')) {
-            const store = db.createObjectStore('movements', { keyPath: 'id' });
-            store.createIndex('date', 'date', { unique: false });
-            store.createIndex('categoryId', 'categoryId', { unique: false });
-            store.createIndex('accountId', 'accountId', { unique: false });
-            store.createIndex('cardId', 'cardId', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 3. cards
+          const cardsStore = ensureStore('cards', { keyPath: 'id' });
+          ensureIndex(cardsStore, 'by_accountId', 'accountId', { unique: false });
+          ensureIndex(cardsStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(cardsStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('transfers')) {
-            const store = db.createObjectStore('transfers', { keyPath: 'id' });
-            store.createIndex('date', 'date', { unique: false });
-            store.createIndex('fromAccountId', 'fromAccountId', { unique: false });
-            store.createIndex('toAccountId', 'toAccountId', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 4. categories
+          const categoriesStore = ensureStore('categories', { keyPath: 'id' });
+          ensureIndex(categoriesStore, 'by_type', 'type', { unique: false });
+          ensureIndex(categoriesStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(categoriesStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('recurring')) {
-            const store = db.createObjectStore('recurring', { keyPath: 'id' });
-            store.createIndex('nextDueDate', 'nextDueDate', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 5. movements
+          const movementsStore = ensureStore('movements', { keyPath: 'id' });
+          ensureIndex(movementsStore, 'by_date', 'date', { unique: false });
+          ensureIndex(movementsStore, 'by_categoryId', 'categoryId', { unique: false });
+          ensureIndex(movementsStore, 'by_accountId', 'accountId', { unique: false });
+          ensureIndex(movementsStore, 'by_cardId', 'cardId', { unique: false });
+          ensureIndex(movementsStore, 'by_ticketId', 'ticketId', { unique: false });
+          ensureIndex(movementsStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(movementsStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('budgets')) {
-            const store = db.createObjectStore('budgets', { keyPath: 'id' });
-            store.createIndex('categoryId', 'categoryId', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 6. transfers (strictly independent from movements)
+          const transfersStore = ensureStore('transfers', { keyPath: 'id' });
+          ensureIndex(transfersStore, 'by_date', 'date', { unique: false });
+          ensureIndex(transfersStore, 'by_fromAccountId', 'fromAccountId', { unique: false });
+          ensureIndex(transfersStore, 'by_toAccountId', 'toAccountId', { unique: false });
+          ensureIndex(transfersStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(transfersStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('tickets')) {
-            const store = db.createObjectStore('tickets', { keyPath: 'id' });
-            store.createIndex('movementId', 'movementId', { unique: false });
-            store.createIndex('status', 'status', { unique: false });
-            store.createIndex('isDeleted', 'isDeleted', { unique: false });
-          }
+          // 7. recurring
+          const recurringStore = ensureStore('recurring', { keyPath: 'id' });
+          ensureIndex(recurringStore, 'by_nextDueDate', 'nextDueDate', { unique: false });
+          ensureIndex(recurringStore, 'by_accountId', 'accountId', { unique: false });
+          ensureIndex(recurringStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(recurringStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('sync_queue')) {
-            const store = db.createObjectStore('sync_queue', { keyPath: 'id' });
-            store.createIndex('status', 'status', { unique: false });
-            store.createIndex('createdAt', 'createdAt', { unique: false });
-          }
+          // 8. budgets
+          const budgetsStore = ensureStore('budgets', { keyPath: 'id' });
+          ensureIndex(budgetsStore, 'by_categoryId', 'categoryId', { unique: false });
+          ensureIndex(budgetsStore, 'by_periodMonth', 'periodMonth', { unique: false });
+          ensureIndex(budgetsStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(budgetsStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('sync_conflicts')) {
-            const store = db.createObjectStore('sync_conflicts', { keyPath: 'id' });
-            store.createIndex('resolution', 'resolution', { unique: false });
-            store.createIndex('entityId', 'entityId', { unique: false });
-          }
+          // 9. tickets
+          const ticketsStore = ensureStore('tickets', { keyPath: 'id' });
+          ensureIndex(ticketsStore, 'by_movementId', 'movementId', { unique: false });
+          ensureIndex(ticketsStore, 'by_status', 'status', { unique: false });
+          ensureIndex(ticketsStore, 'by_updatedAt', 'updatedAt', { unique: false });
+          ensureIndex(ticketsStore, 'by_isDeleted', 'isDeleted', { unique: false });
 
-          if (!db.objectStoreNames.contains('config')) {
-            db.createObjectStore('config', { keyPath: 'key' });
-          }
+          // 10. sync_queue
+          const queueStore = ensureStore('sync_queue', { keyPath: 'id' });
+          ensureIndex(queueStore, 'by_status', 'status', { unique: false });
+          ensureIndex(queueStore, 'by_createdAt', 'createdAt', { unique: false });
+          ensureIndex(queueStore, 'by_entityId', 'entityId', { unique: false });
 
-          if (!db.objectStoreNames.contains('sync_logs')) {
-            const store = db.createObjectStore('sync_logs', { keyPath: 'id' });
-            store.createIndex('timestamp', 'timestamp', { unique: false });
-          }
+          // 11. sync_conflicts
+          const conflictsStore = ensureStore('sync_conflicts', { keyPath: 'id' });
+          ensureIndex(conflictsStore, 'by_resolution', 'resolution', { unique: false });
+          ensureIndex(conflictsStore, 'by_entityId', 'entityId', { unique: false });
+          ensureIndex(conflictsStore, 'by_detectedAt', 'detectedAt', { unique: false });
+
+          // 12. config (key-value store for app configuration)
+          ensureStore('config', { keyPath: 'key' });
+
+          // 13. sync_logs
+          const logsStore = ensureStore('sync_logs', { keyPath: 'id' });
+          ensureIndex(logsStore, 'by_timestamp', 'timestamp', { unique: false });
+          ensureIndex(logsStore, 'by_status', 'status', { unique: false });
         }
       };
 
@@ -181,8 +211,29 @@ export class DatabaseService {
     const tx = db.transaction(enqueueSync ? [storeName, 'sync_queue'] : [storeName], 'readwrite');
     const store = tx.objectStore(storeName);
 
+    const deviceId = getOrCreateDeviceId();
+    const now = new Date().toISOString();
+
+    // Ensure audit fields & stable UUID
+    const enrichedItem: any = {
+      ...item,
+      id: item.id || generateUUID(),
+      createdAt: (item as any).createdAt || now,
+      updatedAt: now,
+      isDeleted: (item as any).isDeleted ?? false,
+      updatedByDeviceId: deviceId,
+      deviceId: deviceId,
+    };
+
+    // Ensure Transfer has synchronized transferId
+    if (storeName === 'transfers') {
+      if (!enrichedItem.transferId) {
+        enrichedItem.transferId = enrichedItem.id;
+      }
+    }
+
     await new Promise<void>((resolve, reject) => {
-      const req = store.put(item);
+      const req = store.put(enrichedItem);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -192,17 +243,17 @@ export class DatabaseService {
       const queueItem: SyncQueueItem = {
         id: generateUUID(),
         entityType: storeName as SyncEntityType,
-        entityId: item.id,
+        entityId: enrichedItem.id,
         operation,
-        payload: item,
-        createdAt: new Date().toISOString(),
+        payload: enrichedItem,
+        createdAt: now,
         retryCount: 0,
         status: 'pending',
       };
       queueStore.put(queueItem);
     }
 
-    return item;
+    return enrichedItem as T;
   }
 
   public async softDeleteItem(
@@ -214,11 +265,14 @@ export class DatabaseService {
     if (!existing) return false;
 
     const deviceId = getOrCreateDeviceId();
+    const now = new Date().toISOString();
     const updated = {
       ...existing,
       isDeleted: true,
-      updatedAt: new Date().toISOString(),
+      deletedAt: now,
+      updatedAt: now,
       updatedByDeviceId: deviceId,
+      deviceId: deviceId,
     };
 
     const db = await this.getDB();
@@ -234,7 +288,7 @@ export class DatabaseService {
         entityId: id,
         operation: 'DELETE',
         payload: updated,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
         retryCount: 0,
         status: 'pending',
       };
@@ -246,12 +300,48 @@ export class DatabaseService {
 
   // Raw put without queue (used by sync engine when pulling from remote)
   public async directPut<T extends { id: string }>(storeName: string, item: T): Promise<void> {
+    const enrichedItem: any = { ...item };
+    if (storeName === 'transfers' && !enrichedItem.transferId) {
+      enrichedItem.transferId = enrichedItem.id;
+    }
+
     const store = await this.getStore(storeName, 'readwrite');
     return new Promise((resolve, reject) => {
-      const req = store.put(item);
+      const req = store.put(enrichedItem);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
+  }
+
+  // User Management
+  public async getUser(id: string): Promise<User | null> {
+    return this.getById<User>('users', id);
+  }
+
+  public async getUserByEmail(email: string): Promise<User | null> {
+    const store = await this.getStore('users', 'readonly');
+    return new Promise((resolve) => {
+      if (!store.indexNames.contains('by_email')) {
+        this.getAll<User>('users').then((users) => {
+          resolve(users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null);
+        });
+        return;
+      }
+      const index = store.index('by_email');
+      const req = index.get(email.toLowerCase());
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  public async saveUser(user: User, enqueueSync = false): Promise<User> {
+    return this.putItem<User>('users', user, enqueueSync, user.createdAt ? 'UPDATE' : 'CREATE');
+  }
+
+  public async getActiveUser(): Promise<User | null> {
+    const config = await this.getConfig();
+    if (!config.userId) return null;
+    return this.getUser(config.userId);
   }
 
   // App Configuration in config store
@@ -263,11 +353,11 @@ export class DatabaseService {
         if (req.result && req.result.value) {
           resolve(req.result.value);
         } else {
-          // Initial default configuration
+          // Clean initial default configuration - No mock user or demo data
           const defaultConfig: AppConfig = {
             deviceId: getOrCreateDeviceId(),
-            userId: 'user_default',
-            userName: 'Usuario Principal',
+            userId: '',
+            userName: '',
             userEmail: '',
             isSharedAccount: false,
             currency: 'EUR',
@@ -281,13 +371,14 @@ export class DatabaseService {
       req.onerror = () => {
         resolve({
           deviceId: getOrCreateDeviceId(),
-          userId: 'user_default',
-          userName: 'Usuario Principal',
+          userId: '',
+          userName: '',
           userEmail: '',
           isSharedAccount: false,
           currency: 'EUR',
           appsScriptUrl: '',
           syncStatus: 'idle',
+          lastSyncTimestamp: null,
         });
       };
     });

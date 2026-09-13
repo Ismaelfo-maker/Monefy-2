@@ -5,13 +5,15 @@
 
 export interface AuditFields {
   id: string; // UUID v4
-  createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
+  createdAt: string; // ISO 8601 UTC
+  updatedAt: string; // ISO 8601 UTC
   isDeleted: boolean; // Tombstone for soft deletes
-  createdByUserId?: string;
-  updatedByUserId?: string;
+  deletedAt?: string | null; // ISO 8601 UTC timestamp on soft delete
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
   createdByDeviceId?: string;
   updatedByDeviceId?: string;
+  deviceId?: string;
 }
 
 export type MovementType = 'expense' | 'income';
@@ -29,6 +31,7 @@ export interface Movement extends AuditFields {
 }
 
 export interface Transfer extends AuditFields {
+  transferId?: string; // Explicit transfer ID matching requirement, synchronized with id
   fromAccountId: string;
   toAccountId: string;
   amount: number;
@@ -45,6 +48,10 @@ export interface Account extends AuditFields {
   color: string;
   icon?: string;
   currency?: string;
+  visibility?: 'private' | 'shared';
+  ownerUserId?: string;
+  authorizedUserIds?: string[];
+  authorizedUserEmails?: string[];
 }
 
 export type CardType = 'credit' | 'debit';
@@ -103,10 +110,11 @@ export interface Ticket extends AuditFields {
   movementId?: string;
   fileName: string;
   mimeType: string;
-  dataBase64?: string; // Stored locally in IndexedDB
+  dataBase64?: string; // Stored locally in IndexedDB while pending_upload
   fileSize: number;
   driveFileId?: string; // Google Drive file ID once uploaded
   driveUrl?: string; // Google Drive web view URL
+  folderId?: string; // Google Drive folder ID
   status: TicketStatus;
   error?: string;
 }
@@ -153,14 +161,14 @@ export interface SyncConflict {
   resolvedAt?: string;
 }
 
-export interface User {
-  id: string;
-  name: string;
+export interface User extends AuditFields {
   email: string;
-  role?: string;
-  createdAt: string;
-  updatedAt: string;
-  isDeleted: boolean;
+  name: string;
+  avatarUrl?: string;
+  currency?: string;
+  role?: 'owner' | 'member' | string;
+  googleId?: string;
+  status?: 'active' | 'invited' | 'disabled';
 }
 
 export interface AppConfig {

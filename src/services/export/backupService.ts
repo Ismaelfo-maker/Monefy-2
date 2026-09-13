@@ -19,6 +19,7 @@ export class BackupService {
     const recurring = await dbService.getAll('recurring', true);
     const budgets = await dbService.getAll('budgets', true);
     const tickets = await dbService.getAll('tickets', true);
+    const users = await dbService.getAll('users', true);
     const config = await dbService.getConfig();
 
     // Sanitize config - REMOVE OAUTH TOKENS AND SECRETS
@@ -39,6 +40,7 @@ export class BackupService {
       exportedAt: new Date().toISOString(),
       config: sanitizedConfig,
       data: {
+        users,
         accounts,
         cards,
         categories,
@@ -114,6 +116,7 @@ export class BackupService {
     const restoredCounts: Record<string, number> = {};
 
     const entityStores = [
+      'users',
       'accounts',
       'cards',
       'categories',
