@@ -15,9 +15,11 @@ import {
   AppConfig,
   MovementType,
   SyncConflict,
+  User,
 } from './types';
 import { dbService } from './services/database/indexedDB';
 import { syncEngine } from './services/sync/syncEngine';
+import { googleAuthService } from './services/google/googleAuthService';
 import { recurringService } from './services/recurring/recurringService';
 import { DEFAULT_CATEGORIES } from './utils/categoryIcons';
 import { generateUUID } from './utils/uuid';
@@ -45,6 +47,7 @@ export default function App() {
 
   // Core Data
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -70,8 +73,12 @@ export default function App() {
   // Load all data from IndexedDB
   const refreshData = useCallback(async () => {
     try {
-      const cfg = await dbService.getConfig();
+      const [cfg, activeUser] = await Promise.all([
+        dbService.getConfig(),
+        dbService.getActiveUser(),
+      ]);
       setConfig(cfg);
+      setCurrentUser(activeUser);
 
       const [accs, crds, cats, movs, trfs, recs, bdgs, pendingQueue, conflicts] =
         await Promise.all([
@@ -114,7 +121,13 @@ export default function App() {
     });
 
     // Subscribe to Sync status updates
-    const unsubscribeSync = syncEngine.subscribe((status) => {
+    const unsubscribeSync = syncEngine.subscribe(() => {
+      refreshData();
+    });
+
+    // Subscribe to Google Auth changes
+    const unsubscribeAuth = googleAuthService.subscribe((state) => {
+      setCurrentUser(state.user);
       refreshData();
     });
 
@@ -126,6 +139,7 @@ export default function App() {
 
     return () => {
       unsubscribeSync();
+      unsubscribeAuth();
       window.removeEventListener('online', handleOnline);
     };
   }, [refreshData]);
@@ -315,6 +329,7 @@ export default function App() {
 
       <Header
         config={config}
+        currentUser={currentUser}
         accounts={accounts.filter((a) => !a.isDeleted)}
         selectedAccountId={selectedAccountId}
         onSelectAccount={setSelectedAccountId}
@@ -392,6 +407,7 @@ export default function App() {
         ) : (
           <SettingsView
             config={config}
+            currentUser={currentUser}
             onUpdateConfig={setConfig}
             onNavigateToTests={() => setSubView('tests')}
             onNavigateToBankImport={() => setSubView('bank-import')}

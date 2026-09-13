@@ -6,6 +6,7 @@
 import { AppsScriptRequest, AppsScriptResponse, AppConfig } from '../../types';
 import { generateUUID } from '../../utils/uuid';
 import { dbService } from '../database/indexedDB';
+import { googleAuthService } from './googleAuthService';
 
 export class GoogleApiClient {
   /**
@@ -46,8 +47,11 @@ export class GoogleApiClient {
         'Content-Type': 'text/plain;charset=utf-8', // Apps Script accepts text/plain to prevent preflight OPTIONS failures
       };
 
-      if (config.googleAccessToken) {
-        headers['Authorization'] = `Bearer ${config.googleAccessToken}`;
+      // Retrieve in-memory access token from googleAuthService (not persisted in IndexedDB)
+      const inMemoryToken = googleAuthService.getAccessToken();
+      const accessToken = inMemoryToken || config.googleAccessToken;
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
       const response = await fetch(config.appsScriptUrl.trim(), {

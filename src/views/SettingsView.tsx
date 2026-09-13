@@ -15,16 +15,22 @@ import {
   ExternalLink,
   HelpCircle,
   AlertTriangle,
+  LogOut,
+  LogIn,
+  UserCheck,
+  Key,
 } from 'lucide-react';
-import { AppConfig, AuditLog } from '../types';
+import { AppConfig, AuditLog, User } from '../types';
 import { dbService } from '../services/database/indexedDB';
 import { googleApi } from '../services/google/apiClient';
+import { googleAuthService } from '../services/google/googleAuthService';
 import { syncEngine } from '../services/sync/syncEngine';
 import { backupService } from '../services/export/backupService';
 import { formatDateTime } from '../utils/formatters';
 
 interface SettingsViewProps {
   config: AppConfig;
+  currentUser?: User | null;
   onUpdateConfig: (newConfig: AppConfig) => void;
   onNavigateToTests: () => void;
   onNavigateToBankImport: () => void;
@@ -34,6 +40,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   config,
+  currentUser,
   onUpdateConfig,
   onNavigateToTests,
   onNavigateToBankImport,
@@ -45,6 +52,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [driveFolderId, setDriveFolderId] = useState(config.driveFolderId || '');
   const [userName, setUserName] = useState(config.userName || '');
   const [currency, setCurrency] = useState(config.currency || 'EUR');
+  const [googleClientId, setGoogleClientId] = useState(config.googleClientId || '');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState<{ success: boolean; text: string } | null>(null);
+  const [copiedUserId, setCopiedUserId] = useState(false);
 
   const [testStatus, setTestStatus] = useState<{
     loading: boolean;
@@ -76,9 +87,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       driveFolderId: driveFolderId.trim() || undefined,
       userName: userName.trim() || 'Usuario Principal',
       currency,
+      googleClientId: googleClientId.trim() || undefined,
     };
     await dbService.saveConfig(updated);
     onUpdateConfig(updated);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setAuthLoading(true);
+    setAuthMessage(null);
+    try {
+      // Save client ID if changed
+      if (googleClientId.trim() && googleClientId.trim() !== config.googleClientId) {
+        await handleSaveConfig();
+      }
+      const result = await googleAuthService.signIn(googleClientId.trim() || undefined);
+      setUserName(result.user.name);
+      onUpdateConfig(result.config);
+      setAuthMessage({
+        success: true,
+        text: `¡Sesión iniciada con éxito! Conectado como ${result.user.name} (${result.user.email}).`,
+      });
+      onRefresh();
+    } catch (err: any) {
+      setAuthMessage({
+        success: false,
+        text: err?.message || 'Error al iniciar sesión con Google',
+      });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    setAuthLoading(true);
+    setAuthMessage(null);
+    try {
+      const updated = await googleAuthService.signOut();
+      onUpdateConfig(updated);
+      setAuthMessage({
+        success: true,
+        text: 'Sesión cerrada correctamente. Los datos locales permanecen en tu dispositivo.',
+      });
+      onRefresh();
+    } catch (err: any) {
+      setAuthMessage({
+        success: false,
+        text: err?.message || 'Error al cerrar sesión de Google',
+      });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const copyUserId = () => {
+    if (config.userId) {
+      navigator.clipboard.writeText(config.userId);
+      setCopiedUserId(true);
+      setTimeout(() => setCopiedUserId(false), 2000);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -309,10 +376,216 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </form>
       </div>
 
+      {/* Google OAuth & User Identity */}
+      <div id="google-oauth-section" className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Cuenta de Google & Identidad
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Autenticación OAuth 2.0 para identidad de usuario estable
+              </p>
+            </div>
+          </div>
+
+          {config.userId ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Conectado
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+              Modo Local
+            </span>
+          )}
+        </div>
+
+        {/* Feedback message */}
+        {authMessage && (
+          <div
+            className={`p-3 rounded-xl text-xs font-medium ${
+              authMessage.success
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`}
+          >
+            {authMessage.text}
+          </div>
+        )}
+
+        {config.userId ? (
+          /* Logged In State */
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+              {currentUser?.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                  {(currentUser?.name || config.userName || 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  {currentUser?.name || config.userName}
+                </p>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {currentUser?.email || config.userEmail || 'Cuenta de Google activa'}
+                </p>
+                {currentUser?.googleId && (
+                  <p className="text-[10px] font-mono text-slate-400 truncate">
+                    Google ID: {currentUser.googleId}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Stable User ID vs Device ID */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wide">
+                    User ID (Permanente)
+                  </span>
+                  <button
+                    onClick={copyUserId}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Copiar User ID"
+                  >
+                    {copiedUserId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-xs font-mono font-bold text-blue-950 truncate mt-1">
+                  {config.userId}
+                </p>
+                <span className="text-[10px] text-blue-700 block mt-0.5">
+                  Estable entre dispositivos
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                    Device ID (Este equipo)
+                  </span>
+                  <button
+                    onClick={copyDeviceId}
+                    className="text-slate-500 hover:text-slate-800 p-1"
+                    title="Copiar Device ID"
+                  >
+                    {copiedDeviceId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-xs font-mono font-bold text-slate-800 truncate mt-1">
+                  {config.deviceId}
+                </p>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  Único de este dispositivo
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-1 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                Los tokens no se almacenan en el almacenamiento local por seguridad.
+              </span>
+              <button
+                id="btn-google-signout"
+                type="button"
+                onClick={handleGoogleSignOut}
+                disabled={authLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition disabled:opacity-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{authLoading ? 'Cerrando...' : 'Cerrar Sesión'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Logged Out / Local Mode State */
+          <div className="space-y-3">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Inicia sesión con tu cuenta de Google para obtener tu identidad permanente de usuario (<code className="text-blue-600 font-mono text-[11px]">userId</code>). La aplicación seguirá funcionando offline con tus datos locales.
+            </p>
+
+            {/* Google Client ID Configuration */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                Google OAuth Client ID (Web Application)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="input-google-client-id"
+                  type="text"
+                  placeholder="ej. 123456789-abc.apps.googleusercontent.com o dejar vacío si está en .env"
+                  value={googleClientId}
+                  onChange={(e) => setGoogleClientId(e.target.value)}
+                  className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  className="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition"
+                  title="Guardar Client ID"
+                >
+                  Guardar
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Configúralo aquí o en <code className="font-mono">VITE_GOOGLE_CLIENT_ID</code> en tu entorno. No requiere client secret.
+              </p>
+            </div>
+
+            {/* Sign In Button */}
+            <div className="pt-2">
+              <button
+                id="btn-google-signin"
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={authLoading}
+                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow transition disabled:opacity-50"
+              >
+                {authLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#ffffff"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#ffffff"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#ffffff"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#ffffff"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                )}
+                <span>{authLoading ? 'Conectando con Google...' : 'Iniciar Sesión con Google'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Device & User Identity */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 space-y-3">
         <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-          Identidad de Este Dispositivo
+          Configuración Local de Este Dispositivo
         </h3>
 
         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">

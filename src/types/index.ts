@@ -179,7 +179,8 @@ export interface AppConfig {
   isSharedAccount: boolean;
   currency: string;
   appsScriptUrl: string;
-  googleAccessToken?: string;
+  googleClientId?: string;
+  googleAccessToken?: string; // Note: Access tokens are held in-memory in googleAuthService and not persisted
   googleTokenExpiresAt?: number;
   spreadsheetId?: string;
   spreadsheetName?: string;

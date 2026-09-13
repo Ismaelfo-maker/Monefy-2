@@ -1,12 +1,13 @@
 import React from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock, Wallet } from 'lucide-react';
-import { AppConfig, Account } from '../types';
+import { RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock, Wallet, User as UserIcon } from 'lucide-react';
+import { AppConfig, Account, User } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   config: AppConfig;
   accounts: Account[];
   selectedAccountId: string;
+  currentUser?: User | null;
   onSelectAccount: (accountId: string) => void;
   onSync: () => void;
   onOpenConflicts: () => void;
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   config,
   accounts,
   selectedAccountId,
+  currentUser,
   onSelectAccount,
   onSync,
   onOpenConflicts,
@@ -120,6 +122,28 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Sync Controls & Install */}
         <div className="flex items-center gap-2">
+          {currentUser ? (
+            <div
+              id="header-user-badge"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+              title={`Conectado con Google: ${currentUser.name} (${currentUser.email})`}
+            >
+              {currentUser.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="w-4 h-4 rounded-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="hidden sm:inline max-w-[80px] truncate">{currentUser.name}</span>
+            </div>
+          ) : null}
+
           {getSyncBadge()}
 
           <button
